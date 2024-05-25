@@ -1,0 +1,454 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+          
+  
+  
+  <modelVersion>4.0.0</modelVersion>
+          
+  
+  
+  <groupId>com.mphasis</groupId>
+          
+  
+  
+  <artifactId>rpa-core-rated-task1</artifactId>
+          
+  
+  
+  <version>1.1</version>
+          
+  
+  
+  <packaging>pom</packaging>
+          
+  
+  
+  <properties>
+                    
+    
+    
+    <maven.compiler.source>1.8</maven.compiler.source>
+                    
+    
+    
+    <maven.compiler.target>1.8</maven.compiler.target>
+                    
+    
+    
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+                    
+    
+    
+    <usecase.name>rpa-core-rated-task1</usecase.name>
+                    
+    
+    
+    <usecase.code>rpa-core-rated-task1</usecase.code>
+                    
+    
+    
+    <usecase.version>${project.version}</usecase.version>
+                    
+    
+    
+    <usecase.model-version>${project.version}</usecase.model-version>
+                    
+    
+    
+    <odf2.version>10.2.8.47</odf2.version>
+                    
+    
+    
+    <bundle-versions-maven-plugin.version>0.0.30</bundle-versions-maven-plugin.version>
+                    
+    
+    
+    <bundle-maven-plugin.version>10.2.8.14</bundle-maven-plugin.version>
+                    
+    
+    
+    <bcb.repository.id>bcb-repository</bcb.repository.id>
+                    
+    
+    
+    <bcb.repository.url>http://localhost:18081/nexus/service/local/repositories/wf-machine-config-bundle/content/</bcb.repository.url>
+                    
+    
+    
+    <package.repository.url>http://localhost:18081/nexus/service/local/repositories/releases/content/</package.repository.url>
+
+
+
+    <rpa.custom.elements.version>1.4</rpa.custom.elements.version>
+
+
+
+  </properties>
+          
+  
+  
+  <repositories>
+                            
+    
+    
+    <repository>
+                              
+      
+      
+      <id>wf-dependencies</id>
+                              
+      
+      
+      <url>https://repository.workfusion.com/content/repositories/wf-dependencies/</url>
+                          
+    
+    
+    </repository>
+                
+  
+  
+  </repositories>
+          
+  
+  
+  <pluginRepositories>
+                            
+    
+    
+    <pluginRepository>
+                              
+      
+      
+      <id>wf-dependencies</id>
+                              
+      
+      
+      <url>https://repository.workfusion.com/content/repositories/wf-dependencies/</url>
+                          
+    
+    
+    </pluginRepository>
+                
+  
+  
+  </pluginRepositories>
+          
+  
+  
+  <distributionManagement>
+                    
+    
+    
+    <repository>
+                              
+      
+      
+      <id>${bcb.repository.id}</id>
+                              
+      
+      
+      <url>${bcb.repository.url}</url>
+                          
+    
+    
+    </repository>
+                
+  
+  
+  </distributionManagement>
+          
+  
+  
+  <dependencyManagement>
+                    
+    
+    
+    <dependencies>
+                              
+      
+      
+      <dependency>
+                                        
+        
+        
+        <groupId>com.workfusion.odf2</groupId>
+                                        
+        
+        
+        <artifactId>odf2-bom</artifactId>
+                                        
+        
+        
+        <version>${odf2.version}</version>
+                                        
+        
+        
+        <type>pom</type>
+                                        
+        
+        
+        <scope>import</scope>
+                                    
+      
+      
+      </dependency>
+                          
+    
+    
+    </dependencies>
+                
+  
+  
+  </dependencyManagement>
+          
+  
+  
+  <profiles>
+                    
+    
+    
+    <profile>
+                              
+      
+      
+      <id>local</id>
+                              
+      
+      
+      <activation>
+                                        
+        
+        
+        <activeByDefault>true</activeByDefault>
+                                    
+      
+      
+      </activation>
+                              
+      
+      
+      <properties>
+                                        
+        
+        
+        <workfusion.server.id>control-tower</workfusion.server.id>
+                                        
+        
+        
+        <workfusion.environment.url>http://localhost:15280</workfusion.environment.url>
+                                    
+      
+      
+      </properties>
+                          
+    
+    
+    </profile>
+                    
+    
+    
+    <profile>
+                              
+      
+      
+      <id>remote</id>
+                              
+      
+      
+      <activation>
+                                        
+        
+        
+        <activeByDefault>false</activeByDefault>
+                                    
+      
+      
+      </activation>
+                              
+      
+      
+      <properties>
+                                        
+        
+        
+        <workfusion.server.id>remote-control-tower</workfusion.server.id>
+                                        
+        
+        
+        <workfusion.environment.url>https://instance.workfusion.com</workfusion.environment.url>
+                                    
+      
+      
+      </properties>
+                          
+    
+    
+    </profile>
+                
+  
+  
+  </profiles>
+          
+  
+  
+  <build>
+                    
+    
+    
+    <pluginManagement>
+                              
+      
+      
+      <plugins>
+                                        
+        
+        
+        <plugin>
+                                                  
+          
+          
+          <groupId>org.apache.maven.plugins</groupId>
+                                                  
+          
+          
+          <artifactId>maven-compiler-plugin</artifactId>
+                                                  
+          
+          
+          <version>3.11.0</version>
+
+
+        
+        </plugin>
+                                        
+        
+        
+        <plugin>
+                                                  
+          
+          
+          <groupId>org.apache.maven.plugins</groupId>
+                                                  
+          
+          
+          <artifactId>maven-assembly-plugin</artifactId>
+                                                  
+          
+          
+          <version>3.4.2</version>
+                                              
+        
+        
+        </plugin>
+                                        
+        
+        
+        <plugin>
+                                                  
+          
+          
+          <groupId>org.apache.maven.plugins</groupId>
+                                                  
+          
+          
+          <artifactId>maven-surefire-plugin</artifactId>
+                                                  
+          
+          
+          <version>3.1.2</version>
+                                              
+        
+        
+        </plugin>
+                                        
+        
+        
+        <plugin>
+                                                  
+          
+          
+          <groupId>org.apache.maven.plugins</groupId>
+                                                  
+          
+          
+          <artifactId>maven-failsafe-plugin</artifactId>
+                                                  
+          
+          
+          <version>3.1.2</version>
+                                              
+        
+        
+        </plugin>
+                                        
+        
+        
+        <plugin>
+                                                  
+          
+          
+          <groupId>com.workfusion.odf</groupId>
+                                                  
+          
+          
+          <artifactId>bundle-versions-maven-plugin</artifactId>
+                                                  
+          
+          
+          <version>${bundle-versions-maven-plugin.version}</version>
+                                              
+        
+        
+        </plugin>
+                                        
+        
+        
+        <plugin>
+                                                  
+          
+          
+          <groupId>com.workfusion.odf</groupId>
+                                                  
+          
+          
+          <artifactId>bundle-maven-plugin</artifactId>
+                                                  
+          
+          
+          <version>${bundle-maven-plugin.version}</version>
+                                              
+        
+        
+        </plugin>
+                                    
+      
+      
+      </plugins>
+                          
+    
+    
+    </pluginManagement>
+                
+  
+  
+  </build>
+      
+  
+  
+  <modules>
+              
+    
+    
+    <module>rpa-core-rated-task1-bcb</module>
+              
+    
+    
+    <module>rpa-core-rated-task1-package</module>
+          
+    
+    <module>rpa-core-rated-task1-test</module>
+      
+  </modules>
+    
+
+</project>
