@@ -27,8 +27,6 @@ public class WellsFargoNavigationTask implements GenericTask {
 
     private final Logger logger;
 
-    private final SecretsVaultService secretsVaultService;
-
     private final S3Service s3Service;
 
     private final TaskRunnerOutput taskRunnerOutput;
@@ -41,7 +39,6 @@ public class WellsFargoNavigationTask implements GenericTask {
         RpaFactory rpaFactory = injector.instance(RpaFactory.class);
         this.rpaRunner = rpaFactory.builder(RpaDriver.UNIVERSAL).closeOnCompletion(true).build();
         this.logger = injector.instance(Logger.class);
-        this.secretsVaultService = injector.instance(SecretsVaultService.class);
         this.s3Service = injector.instance(S3Service.class);
         this.taskRunnerOutput = injector.instance(TaskRunnerOutput.class);
     }

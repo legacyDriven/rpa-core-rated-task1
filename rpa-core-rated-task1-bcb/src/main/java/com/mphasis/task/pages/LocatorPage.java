@@ -14,9 +14,9 @@ import static com.mphasis.task.pages.common.BankLocatorSelectors.*;
 
 public class LocatorPage extends BasePage {
 
-    private TextBox searchBox = new TextBox(driver, By.id("mainSearchField"), "Search Box");
+    private final TextBox searchBox = new TextBox(driver, By.id("mainSearchField"), "Search Box");
 
-    private Button searchButton = new Button(driver, By.id("mainSearchButton"), "Search Button");
+    private final Button searchButton = new Button(driver, By.id("mainSearchButton"), "Search Button");
 
     public LocatorPage(DriverWrapper driver) {
         super(driver);
@@ -30,7 +30,7 @@ public class LocatorPage extends BasePage {
         WebElement searchResultsList = driver.findElement(SEARCH_RESULTS_LIST);
         List<WebElement> resultItems = searchResultsList.findElements(RESULT_ITEM);
 
-        return mapToDto(resultItems);
+        return mapToDto(resultItems.subList(0, maxResultCount));
     }
 
     private List<WellsFargoLocationDto> mapToDto(List<WebElement> searchResults) {
