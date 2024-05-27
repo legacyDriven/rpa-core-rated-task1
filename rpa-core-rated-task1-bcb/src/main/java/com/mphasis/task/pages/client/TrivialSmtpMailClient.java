@@ -8,6 +8,11 @@ import static com.mphasis.task.pages.common.EmailTaskRelatedConstants.*;
 
 public class TrivialSmtpMailClient {
 
+    public static void main(String[] args) {
+        TrivialSmtpMailClient sender = new TrivialSmtpMailClient();
+        sender.sendEmail();
+    }
+
     public void sendEmail() {
         Properties props = new Properties();
         props.put("mail.smtp.auth", "true");
@@ -25,7 +30,7 @@ public class TrivialSmtpMailClient {
             Message message = new MimeMessage(session);
             message.setFrom(new InternetAddress(DEFAULT_SENDER_EMAIL));
             message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(DEFAULT_RECIPIENT_EMAIL));
-            message.setSubject("You are awesome!");
+            message.setSubject(DEFAULT_SUBJECT);
             message.setText(DEFAULT_MESSAGE);
 
             Transport.send(message);

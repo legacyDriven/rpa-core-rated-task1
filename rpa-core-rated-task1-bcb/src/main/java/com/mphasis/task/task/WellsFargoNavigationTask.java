@@ -6,14 +6,17 @@ import com.mphasis.task.pages.client.WellsFargoClient;
 import com.mphasis.task.pages.dto.WellsFargoLocationDto;
 import com.workfusion.odf2.compiler.BotTask;
 import com.workfusion.odf2.core.cdi.Injector;
+import com.workfusion.odf2.core.cdi.Requires;
 import com.workfusion.odf2.core.task.generic.GenericTask;
+import com.workfusion.odf2.core.task.output.SingleResult;
 import com.workfusion.odf2.core.task.output.TaskRunnerOutput;
 import com.workfusion.odf2.core.webharvest.rpa.RpaDriver;
 import com.workfusion.odf2.core.webharvest.rpa.RpaFactory;
 import com.workfusion.odf2.core.webharvest.rpa.RpaRunner;
+import com.workfusion.odf2.service.ControlTowerServicesModule;
 import com.workfusion.odf2.service.s3.S3Bucket;
+import com.workfusion.odf2.service.s3.S3Module;
 import com.workfusion.odf2.service.s3.S3Service;
-import com.workfusion.odf2.service.vault.SecretsVaultService;
 import org.slf4j.Logger;
 
 import javax.inject.Inject;
@@ -21,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @BotTask(requireRpa = true)
+@Requires({ControlTowerServicesModule.class})
 public class WellsFargoNavigationTask implements GenericTask {
 
     private final RpaRunner rpaRunner;
@@ -32,6 +36,7 @@ public class WellsFargoNavigationTask implements GenericTask {
     private final TaskRunnerOutput taskRunnerOutput;
 
     static String HARDCODED_SEARCH_LOCATION = "Cherry Hill";
+
     static int REQUIRED_RESULTS_COUNT = 10;
 
     @Inject
@@ -45,18 +50,20 @@ public class WellsFargoNavigationTask implements GenericTask {
 
     @Override
     public TaskRunnerOutput run() {
+        final String[] S3Url = new String[1];
         this.rpaRunner.execute(driver -> {
             WellsFargoClient wellsFargoClient = new WellsFargoClient(this.logger);
             LandingPage landingPage = wellsFargoClient.getLandingPage();
             LocatorPage locatorPage = landingPage.navigateToLocator();
             List<WellsFargoLocationDto> locations = locatorPage.searchLocations(HARDCODED_SEARCH_LOCATION, REQUIRED_RESULTS_COUNT);
+            // preparing CSV
             String csvContent = prepareCSV(locations);
+            // saving or uploading CSV content to S3 Bucket
+            final S3Bucket s3Bucket = s3Service.getBucket("525424");
             byte[] csvBytes = csvContent.getBytes(StandardCharsets.UTF_8);
-            S3Bucket s3Bucket = s3Service.getBucket("525424");
-            String s3Url = s3Bucket.put(csvBytes, "wellsfargo_locations.csv").getDirectUrl();
-            this.taskRunnerOutput.setColumn("locations_csv_url", s3Url);
+            S3Url[0] = s3Bucket.put(csvBytes, "wells_fargo_locations.csv").getDirectUrl();
         });
-        return this.taskRunnerOutput;
+        return new SingleResult().withColumn("locations_csv_url", S3Url[0]);
     }
 
     private String prepareCSV(List<WellsFargoLocationDto> locations) {
