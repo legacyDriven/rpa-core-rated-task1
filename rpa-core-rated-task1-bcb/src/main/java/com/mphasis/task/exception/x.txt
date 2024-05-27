@@ -1,0 +1,234 @@
+import static com.workfusion.rpa.helpers.RPA.$;
+import static com.workfusion.rpa.helpers.RPA.open;
+import static com.workfusion.rpa.helpers.RPA.sleep;
+import static com.workfusion.rpa.helpers.UiSelectors.byXpath;
+import java.io.*;
+import java.sql.SQLException;
+import java.time.Clock;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Date;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import javax.inject.Inject;
+import com.rj.evelyn.model.orm.Enrichment;
+import com.rj.evelyn.model.orm.OdfException;
+import com.rj.evelyn.repository.OdfExceptionRepository;
+import com.rj.evelyn.service.MantasService;
+import com.rj.evelyn.runner.RPATransactionGenerator;
+import com.rj.evelyn.service.SFTPSharedFolderService;
+import com.workfusion.odf2.transaction.CurrentTransaction;
+import com.workfusion.odf2.transaction.TransactionModule;
+import org.apache.commons.lang3.StringUtils;
+import org.openqa.selenium.By;
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.WebDriverWait;
+import org.slf4j.Logger;
+import com.rj.evelyn.constants.Global;
+import com.rj.evelyn.constants.TransactionStatus;
+import com.rj.evelyn.model.orm.Alert;
+import com.rj.evelyn.module.ConfigModule;
+import com.rj.evelyn.module.FileStorageModule;
+import com.rj.evelyn.module.RepositoriesModule;
+import com.rj.evelyn.repository.AlertRepository;
+import com.rj.evelyn.repository.ConfigRepository;
+import com.rj.evelyn.repository.EnrichmentRepository;
+import com.rj.evelyn.service.SambaSharedFolderService;
+import com.workfusion.bot.service.SecureEntryDTO;
+import com.workfusion.odf2.compiler.BotTask;
+import com.workfusion.odf2.core.cdi.Requires;
+import com.workfusion.odf2.core.settings.ConfigEntity;
+import com.workfusion.odf2.core.task.TaskInput;
+import com.workfusion.odf2.core.webharvest.rpa.RpaDriver;
+import com.workfusion.odf2.core.webharvest.rpa.RpaFactory;
+import com.workfusion.odf2.core.webharvest.rpa.RpaRunner;
+import com.workfusion.odf2.service.ControlTowerServicesModule;
+import com.workfusion.odf2.service.pool.PoolObjectFactory;
+import com.workfusion.odf2.service.pool.PoolObjectRunner;
+import com.workfusion.odf2.service.vault.SecretsVaultService;
+import com.workfusion.odf2.transaction.model.Transaction;
+import com.workfusion.odf2.transaction.repository.TransactionRepository;
+@BotTask(requireRpa = true)
+@Requires({ControlTowerServicesModule.class, RepositoriesModule.class, ConfigModule.class, FileStorageModule.class, TransactionModule.class})
+public class RpaDownloadRdcGridBotTask implements RPATransactionGenerator {
+    private final RpaRunner rpaRunner;
+    private final AlertRepository alertRepository;
+    private final TransactionRepository transactionRepository;
+    private final EnrichmentRepository enrichmentRepository;
+    private final Logger logger;
+    public static final String RPA_CREDENTIALS_ALIASES_PROPERTY = "grid_rdc_credentials_aliases";
+    public static final String RPA_LOGIN_URL_PROPERTY = "grid_rdc_login_url";
+    public static final String RPA_URL_MATCH_PROPERTY = "grid_rdc_match";
+    public String credAliases;
+    public String loginUrl;
+    public String urlMatch;
+    private final SecretsVaultService secretsVaultService;
+    private final SambaSharedFolderService sharedFolderService;
+    private final PoolObjectRunner poolRunner;
+    private final MantasService mantasService;
+    private final Boolean isSFTPEnabled;
+    private final SFTPSharedFolderService sftpSharedFolderService;
+    private final CurrentTransaction currentTransaction;
+    private final OdfExceptionRepository odfExceptionRepository;
+    @Inject
+    public RpaDownloadRdcGridBotTask(RpaFactory rpaFactory, TransactionRepository transactionRepository,
+                                     PoolObjectFactory poolObjectFactory, AlertRepository alertRepository,
+                                     Logger logger, ConfigRepository configRepository, EnrichmentRepository enrichmentRepository,
+                                     SecretsVaultService secretsVaultService, SambaSharedFolderService sharedFolderService,
+                                     MantasService mantasService, SFTPSharedFolderService sftpSharedFolderService,
+                                     OdfExceptionRepository odfExceptionRepository, CurrentTransaction currentTransaction) {
+        this.transactionRepository = transactionRepository;
+        this.alertRepository = alertRepository;
+        this.enrichmentRepository = enrichmentRepository;
+        this.logger = logger;
+        this.secretsVaultService = secretsVaultService;
+        this.sharedFolderService = sharedFolderService;
+        this.credAliases = configRepository.findByName(RPA_CREDENTIALS_ALIASES_PROPERTY).map(ConfigEntity::getValue).orElse("");
+        this.loginUrl = configRepository.findByName(RPA_LOGIN_URL_PROPERTY).map(ConfigEntity::getValue).orElse("");
+        this.urlMatch = configRepository.findByName(RPA_URL_MATCH_PROPERTY).map(ConfigEntity::getValue).orElse("");
+        this.rpaRunner = rpaFactory.builder(RpaDriver.CHROME).closeOnCompletion(true).maximizeOnStartup(true).startInPrivate(false).build();
+        this.poolRunner = poolObjectFactory.builder("pool_runner").waitTimeout(30000).build();
+        this.mantasService = mantasService;
+        this.sftpSharedFolderService = sftpSharedFolderService;
+        String stringSFTPEnabled = configRepository.findByName(Global.SFTP_IS_ENABLED_FOR_OUTPUT_VAR).map(ConfigEntity::getValue).orElse("");
+        this.isSFTPEnabled = stringSFTPEnabled.equals("yes");
+        this.currentTransaction = currentTransaction;
+        this.odfExceptionRepository = odfExceptionRepository;
+    }
+    @Override
+    public boolean shouldRun() {
+        return true;
+    }
+    private byte[] readFileToBytesAndFinallyDelete(String entityId) {
+        File file = new File(System.getProperty("user.home") + "\\Downloads\\entity_" + entityId + ".pdf");
+        byte[] bytes = new byte[(int) file.length()];
+        try (FileInputStream fis = new FileInputStream(file)) {
+            int bytesRead = fis.read(bytes);
+            if (bytesRead < 1) logger.error("Has been read only " + bytesRead + " bytes.");
+        } catch (IOException e) {
+            logger.error("Can not read downloaded file in RPA Server. Exception: " + Arrays.toString(e.getStackTrace()));
+        } finally {
+            boolean isDeleted = file.delete();
+            if (!isDeleted) logger.error("File " + file.getAbsolutePath() + " has not been deleted properly.");
+        }
+        return bytes;
+    }
+    @Override
+    public Collection<Transaction> run(TaskInput taskInput) {
+        String rpaGroupID = taskInput.getVariable(Global.ALERT_GROUP_UUID).orElse("");
+        Transaction transaction = currentTransaction.get();
+        final List<Transaction> transactions = new ArrayList<>();
+        List<Alert> alertsPerWorker;
+        if ( !StringUtils.isEmpty(rpaGroupID)) {
+            List<String> credentialAliasList = Arrays.asList(credAliases.split("\\|"));
+            try {
+                alertsPerWorker = new ArrayList<>(alertRepository.findAllByRpaGroup(UUID.fromString(rpaGroupID)));
+            } catch (SQLException e) {
+                throw new IllegalStateException("Can not read Alerts: " + e);
+            }
+            // Catching ERRORS if RPA can not be initialized, then "rpaRunner.execute(driver -> {" will fail
+            try {
+                poolRunner.execute(credentialAliasList, credAlias -> {
+                    rpaRunner.execute(driver -> {
+                        String loginRpaError = "";
+                        try {
+                            SecureEntryDTO loginCredentials = secretsVaultService.getEntry((String) credAlias);
+                            driver.manage().timeouts().implicitlyWait(60, TimeUnit.SECONDS).pageLoadTimeout(60, TimeUnit.SECONDS);
+                            open(loginUrl);
+                            $("#login_submit_userId").sendKeys(loginCredentials.getKey());
+                            $("#login_submit_password").sendKeys(loginCredentials.getValue());
+                            $(byXpath("//input[@type='submit']")).click();
+                            WebDriverWait wait = new WebDriverWait(driver, 30);
+                            wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//*[@id='search_submit_wssSearchRequest_entityTypeP']")));
+                        } catch (Exception e) {
+                            logger.error("Error in authentication RPA : {}", e.getMessage());
+                            loginRpaError = "Error in login to GRID RPA : " + Arrays.toString(e.getStackTrace());
+                        }
+                        for (Alert alert : alertsPerWorker) {
+                            logger.warn("alert json {}", alert.getAlertJson());
+                            Transaction newTransaction = transactionRepository.startNewTransaction(TransactionStatus.ENRICHMENT_IN_PROGRESS);
+                            alert.setTransaction(newTransaction);
+                            if (loginRpaError.isEmpty()) {
+                                if (StringUtils.contains(alert.getRdcLinkForRpa(), urlMatch)) {
+                                    String downloadRPAError = "";
+                                    String rdcEntityID = alert.getHitIdForRpa();
+                                    try {
+                                        open(alert.getRdcLinkForRpa());
+                                        WebDriverWait secondWait = new WebDriverWait(driver, 30);
+                                        secondWait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//*[@id='r-body']/div/span/a")));
+                                        rdcEntityID = $(byXpath("//*[@id='ev-entity-id']")).getText();
+                                        $(byXpath("//*[@id='r-body']/div/span/a")).click();
+                                        sleep(3000); // wait for large PDF to be downloaded
+                                    } catch (Exception e) {
+                                        logger.error("Error in RPA : " + Arrays.toString(e.getStackTrace()));
+                                        downloadRPAError = "Error in download GRID PDF RPA : " + Arrays.toString(e.getStackTrace());
+                                    }
+                                    if (downloadRPAError.isEmpty()) {
+                                        byte[] reportBytes = readFileToBytesAndFinallyDelete(rdcEntityID);
+                                        String filePathOfRdcGridPdf = (isSFTPEnabled) ?
+                                                sftpSharedFolderService.saveRdcGridPdfToOutputSF(rdcEntityID, reportBytes) :
+                                                sharedFolderService.saveRdcGridPdfReport(rdcEntityID, reportBytes);
+                                        alert.setSkipMt("true");
+                                        alert.setRdcGridReportLink(filePathOfRdcGridPdf);
+                                        alertRepository.update(alert);
+                                        logger.warn("alert updated {}", alert.getAlertId());
+                                        mantasService.sendRdcGridPdfFilePathToMantas(alert);
+                                        if (StringUtils.contains(alert.getRdcLinkForRpa(), urlMatch) && !filePathOfRdcGridPdf.isEmpty()) {
+                                            Enrichment enrichment = new Enrichment();
+                                            enrichment.setTransaction(newTransaction);
+                                            enrichment.setAlert(alert);
+                                            enrichment.setType(Enrichment.Type.GRID_RDC);
+                                            enrichment.setReceivedTime(new Date());
+                                            enrichment.setResponse("PDF file " + filePathOfRdcGridPdf + ", downloaded with RPA from grid.rdc.com has been saved to shared folder");
+                                            enrichmentRepository.createOrUpdate(enrichment);
+                                        }
+                                    } else {
+                                        alert.setRdcGridReportLink(downloadRPAError.substring(0, 3990));
+                                        alert.setSkipMt("false");
+                                        alertRepository.update(alert);
+                                    }
+                                }
+                            } else {
+                                alert.setRdcGridReportLink(loginRpaError.substring(0, 3990));
+                                alert.setSkipMt("false");
+                                alertRepository.update(alert);
+                            }
+                            transactions.add(newTransaction);
+                        }
+                    });
+                });
+            } catch (Exception e) {
+                String rpaError = "RPA driver initialization failed";
+                for (Alert alert : alertsPerWorker) {
+                    alert.setRdcGridReportLink((rpaError + " " + getErrorStackTrace(e)).substring(0, 3990));
+                    alert.setSkipMt("false");
+                    Transaction newTransaction = transactionRepository.startNewTransaction(TransactionStatus.ENRICHMENT_IN_PROGRESS);
+                    alert.setTransaction(newTransaction);
+                    alertRepository.update(alert);
+                    transactions.add(newTransaction);
+                }
+                logErrorToDatastore(rpaError, transaction, e);
+                logger.error(rpaError + ". Error : " + getErrorStackTrace(e));
+                return transactions;
+            }
+        }
+        return transactions;
+    }
+    private void logErrorToDatastore(String message, Transaction transaction, Exception e) {
+        OdfException odfException = new OdfException();
+        odfException.setShortDescription(message);
+        odfException.setTransaction(transaction);
+        if (e != null) odfException.setFullDescription(getErrorStackTrace(e));
+        odfException.setDateTimeOccurred(Date.from(Clock.systemUTC().instant()));
+        odfExceptionRepository.create(odfException);
+    }
+    private String getErrorStackTrace(Exception e) {
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        e.printStackTrace(pw);
+        return sw.toString();
+    }
+}
+has context menu
