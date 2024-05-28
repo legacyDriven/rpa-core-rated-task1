@@ -2,6 +2,7 @@ package com.mphasis.task.task;
 
 import com.mphasis.task.pages.LandingPage;
 import com.mphasis.task.pages.LocatorPage;
+import com.mphasis.task.pages.ResultsPage;
 import com.mphasis.task.pages.client.WellsFargoClient;
 import com.mphasis.task.pages.dto.WellsFargoLocationDto;
 import com.workfusion.odf2.compiler.BotTask;
@@ -24,7 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @BotTask(requireRpa = true)
-@Requires({ControlTowerServicesModule.class})
+@Requires({ControlTowerServicesModule.class, S3Module.class})
 public class WellsFargoNavigationTask implements GenericTask {
 
     private final RpaRunner rpaRunner;
@@ -33,8 +34,6 @@ public class WellsFargoNavigationTask implements GenericTask {
 
     private final S3Service s3Service;
 
-    private final TaskRunnerOutput taskRunnerOutput;
-
     static String HARDCODED_SEARCH_LOCATION = "Cherry Hill";
 
     static int REQUIRED_RESULTS_COUNT = 10;
@@ -42,10 +41,9 @@ public class WellsFargoNavigationTask implements GenericTask {
     @Inject
     public WellsFargoNavigationTask(Injector injector) {
         RpaFactory rpaFactory = injector.instance(RpaFactory.class);
-        this.rpaRunner = rpaFactory.builder(RpaDriver.UNIVERSAL).closeOnCompletion(true).build();
+        this.rpaRunner = rpaFactory.builder(RpaDriver.UNIVERSAL).maximizeOnStartup(true).closeOnCompletion(true).build();
         this.logger = injector.instance(Logger.class);
         this.s3Service = injector.instance(S3Service.class);
-        this.taskRunnerOutput = injector.instance(TaskRunnerOutput.class);
     }
 
     @Override
@@ -55,9 +53,10 @@ public class WellsFargoNavigationTask implements GenericTask {
             WellsFargoClient wellsFargoClient = new WellsFargoClient(this.logger);
             LandingPage landingPage = wellsFargoClient.getLandingPage();
             LocatorPage locatorPage = landingPage.navigateToLocator();
-            List<WellsFargoLocationDto> locations = locatorPage.searchLocations(HARDCODED_SEARCH_LOCATION, REQUIRED_RESULTS_COUNT);
+            ResultsPage resultsPage = locatorPage.searchLocations(HARDCODED_SEARCH_LOCATION, REQUIRED_RESULTS_COUNT);
+            List<WellsFargoLocationDto> searchResults = resultsPage.processSearchResult(REQUIRED_RESULTS_COUNT);
             // preparing CSV
-            String csvContent = prepareCSV(locations);
+            String csvContent = prepareCSV(searchResults);
             // saving or uploading CSV content to S3 Bucket
             final S3Bucket s3Bucket = s3Service.getBucket("525424");
             byte[] csvBytes = csvContent.getBytes(StandardCharsets.UTF_8);

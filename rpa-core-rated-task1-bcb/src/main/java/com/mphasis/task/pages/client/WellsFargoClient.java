@@ -16,6 +16,7 @@ public class  WellsFargoClient {
 
     public WellsFargoClient(Logger logger) {
         this.driverWrapper = new RobotDriverWrapper(logger);
+        driverWrapper.getDriverSettings().setPageLoadWaitSeconds(10);
     }
 
     public LandingPage getLandingPage() {
